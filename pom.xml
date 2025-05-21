@@ -1,0 +1,23 @@
+<dependencies>
+  <!-- Spring Web -->
+  <dependency>
+    <groupId>org.springframework.boot</groupId>
+    <artifactId>spring-boot-starter-web</artifactId>
+  </dependency>
+
+  <!-- CSV parsing -->
+  <dependency>
+    <groupId>org.apache.commons</groupId>
+    <artifactId>commons-csv</artifactId>
+    <version>1.10.0</version>
+  </dependency>
+
+  <!-- Excel (Apache POI) -->
+  <dependency>
+    <groupId>org.apache.poi</groupId>
+    <artifactId>poi-ooxml</artifactId>
+    <version>5.2.3</version>
+  </dependency>
+
+  <!-- JSON (Jackson) is transitively included by Spring Boot -->
+</dependencies>
