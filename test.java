@@ -1,53 +1,43 @@
-import org.apache.commons.csv.CSVFormat;
-import org.apache.commons.csv.CSVParser;
-import org.apache.commons.csv.CSVRecord;
-
+import org.apache.poi.hssf.usermodel.HSSFWorkbook;
+import org.apache.poi.ss.usermodel.*;
+import org.apache.poi.xssf.usermodel.XSSFWorkbook;
 import java.io.InputStream;
-import java.io.InputStreamReader;
-import java.io.Reader;
-import java.nio.charset.StandardCharsets;
-import java.util.ArrayList;
-import java.util.Collections;
-import java.util.List;
+import java.util.*;
 
-private List<ColumnDetail> parseCsv(InputStream in, boolean isFirstRowHeader) throws Exception {
-    // Create a reader and parser
-    try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8);
-         CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT)) {
+private List<ColumnDetail> parseExcel(InputStream in,
+                                      String filename,
+                                      boolean isFirstRowHeader) throws Exception {
+  Workbook wb;
+  String lower = filename.toLowerCase(Locale.ROOT);
+  if (lower.endsWith(".xls")) {
+    wb = new HSSFWorkbook(in);
+  } else if (lower.endsWith(".xlsx")) {
+    wb = new XSSFWorkbook(in);
+  } else {
+    throw new IllegalArgumentException("Not an Excel file: " + filename);
+  }
 
-        List<CSVRecord> records = parser.getRecords();
-        if (records.isEmpty()) {
-            return Collections.emptyList();
-        }
+  Sheet sheet = wb.getSheetAt(0);
+  Iterator<Row> rows = sheet.rowIterator();
+  if (!rows.hasNext()) return Collections.emptyList();
 
-        // The "header" record (either true header or first data row)
-        CSVRecord headerRec = records.get(0);
+  Row first = rows.next();
+  // build header names
+  List<String> headers = new ArrayList<>();
+  for (Cell c : first) {
+    headers.add(isFirstRowHeader
+        ? c.getStringCellValue()
+        : String.valueOf(c.getColumnIndex()));
+  }
 
-        // Build header names
-        List<String> headers = new ArrayList<>();
-        if (isFirstRowHeader) {
-            for (int i = 0; i < headerRec.size(); i++) {
-                headers.add(headerRec.get(i));
-            }
-        } else {
-            for (int i = 0; i < headerRec.size(); i++) {
-                headers.add(String.valueOf(i));
-            }
-        }
-
-        // Pick a sample row for type detection
-        CSVRecord sampleRec = (isFirstRowHeader && records.size() > 1)
-                ? records.get(1)
-                : headerRec;
-
-        // Build the output list
-        List<ColumnDetail> out = new ArrayList<>();
-        for (int i = 0; i < headers.size(); i++) {
-            String sample = i < sampleRec.size() ? sampleRec.get(i) : "";
-            String type = DataTypeDetector.detect(sample);
-            out.add(new ColumnDetail(headers.get(i), type));
-        }
-
-        return out;
-    }
+  // choose sample row
+  Row sampleRow = (isFirstRowHeader && rows.hasNext()) ? rows.next() : first;
+  List<ColumnDetail> out = new ArrayList<>();
+  for (int i = 0; i < headers.size(); i++) {
+    Cell c = sampleRow.getCell(i, Row.MissingCellPolicy.CREATE_NULL_AS_BLANK);
+    String text = DataTypeDetector.cellValueAsString(c);
+    String type = DataTypeDetector.detect(text);
+    out.add(new ColumnDetail(headers.get(i), type));
+  }
+  return out;
 }
