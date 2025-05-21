@@ -1,43 +1,53 @@
-private List<ColumnDetail> parseJson(InputStream in, boolean hdr) throws Exception {
-    JsonNode root = objectMapper.readTree(in);
-    if (!root.isArray() || root.size() == 0) {
-        return Collections.emptyList();
-    }
+import org.apache.commons.csv.CSVFormat;
+import org.apache.commons.csv.CSVParser;
+import org.apache.commons.csv.CSVRecord;
 
-    // Collect all elements into a List<JsonNode>
-    List<JsonNode> rows = new ArrayList<>();
-    root.forEach(rows::add);
+import java.io.InputStream;
+import java.io.InputStreamReader;
+import java.io.Reader;
+import java.nio.charset.StandardCharsets;
+import java.util.ArrayList;
+import java.util.Collections;
+import java.util.List;
 
-    // Determine headers
-    List<String> headers = new ArrayList<>();
-    JsonNode first = rows.get(0);
-    if (hdr) {
-        // Collect field names from the first object
-        Iterator<String> fieldNames = first.fieldNames();
-        fieldNames.forEachRemaining(headers::add);
-    } else {
-        // Use numeric indices as headers
-        int count = first.size();
-        for (int i = 0; i < count; i++) {
-            headers.add(String.valueOf(i));
+private List<ColumnDetail> parseCsv(InputStream in, boolean isFirstRowHeader) throws Exception {
+    // Create a reader and parser
+    try (Reader reader = new InputStreamReader(in, StandardCharsets.UTF_8);
+         CSVParser parser = new CSVParser(reader, CSVFormat.DEFAULT)) {
+
+        List<CSVRecord> records = parser.getRecords();
+        if (records.isEmpty()) {
+            return Collections.emptyList();
         }
-    }
 
-    // Prepare output list
-    List<ColumnDetail> out = new ArrayList<>();
-    for (int i = 0; i < headers.size(); i++) {
-        String header = headers.get(i);
-        String sample;
-        if (hdr) {
-            JsonNode v = first.get(header);
-            sample = (v != null && !v.isNull()) ? v.asText() : "";
+        // The "header" record (either true header or first data row)
+        CSVRecord headerRec = records.get(0);
+
+        // Build header names
+        List<String> headers = new ArrayList<>();
+        if (isFirstRowHeader) {
+            for (int i = 0; i < headerRec.size(); i++) {
+                headers.add(headerRec.get(i));
+            }
         } else {
-            JsonNode v = first.path(i);
-            sample = v.isMissingNode() || v.isNull() ? "" : v.asText();
+            for (int i = 0; i < headerRec.size(); i++) {
+                headers.add(String.valueOf(i));
+            }
         }
-        String type = DataTypeDetector.detect(sample);
-        out.add(new ColumnDetail(header, type));
-    }
 
-    return out;
+        // Pick a sample row for type detection
+        CSVRecord sampleRec = (isFirstRowHeader && records.size() > 1)
+                ? records.get(1)
+                : headerRec;
+
+        // Build the output list
+        List<ColumnDetail> out = new ArrayList<>();
+        for (int i = 0; i < headers.size(); i++) {
+            String sample = i < sampleRec.size() ? sampleRec.get(i) : "";
+            String type = DataTypeDetector.detect(sample);
+            out.add(new ColumnDetail(headers.get(i), type));
+        }
+
+        return out;
+    }
 }
